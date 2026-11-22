@@ -1,44 +1,53 @@
 # MyLootOnlyForever
 
-A lightweight, standalone World of Warcraft: **Forever** addon that filters out other players' loot, crafting, and roll messages while keeping your own drops, crafts, and rolls clearly visible.
+MyLootOnlyForever is a lightweight, standalone World of Warcraft: Forever addon that filters other players' loot, crafting, and loot roll messages while keeping your chat focused on the messages you want to see.
 
-## ✨ Features
-* **Only Your Loot:** Hides `[Player] receives loot:` messages while preserving your own `You receive loot:` pickups.
-* **Item Quality Threshold (New in v1.1.0):** Optionally allow **Uncommon (Green)**, **Rare (Blue)**, **Epic (Purple)**, or **Legendary (Orange)** drops from party/raid members to still show in chat while hiding lower-rarity spam.
-* **Loot Whitelist Exceptions (New in v1.2.0):** Allow loot messages from specific players through regardless of the quality threshold.
-* **Guild and Friend Exceptions (New in v1.2.0):** Optional settings allow guildmates' or friends' loot and crafting messages through automatically.
-* **Party and Raid Loot Exception (New in v1.2.0):** Optionally show loot from current party and raid members regardless of the quality threshold.
-* **No Crafting Spam:** Hides nearby `[Player] creates ...` notifications while keeping your own `You create ...` lines.
-* **Optional Roll Filtering:** Optionally hide other players' Need, Greed, Pass, and roll winner lines while keeping your own roll results.
-* **Native Settings Panel:** Configure everything easily under **Escape > Options > AddOns > MyLootOnlyForever** with persistent `SavedVariables`.
-* **Multi-Language Support:** Uses Blizzard's built-in `GlobalStrings` to adapt automatically to English, German, French, Spanish, and other client languages.
-* **Zero Dependencies:** Completely standalone—no external libraries required.
+## Features
 
-## 💬 Slash Commands
+- **Loot filtering:** Hide other players' loot messages and choose the minimum item quality to show.
+- **Crafting and roll filters:** Choose whether to hide other players' crafting messages and loot rolls.
+- **Loot exceptions:** Always show loot from specific players. Add and remove exceptions in the settings panel.
+- **Social filters:** Allow loot from party and raid members, and allow loot and crafting messages from guildmates or friends.
+- **Special loot:** Choose to show other players' mount, companion pet, toy, and recipe items even when their other loot is filtered.
+- **Per-character settings:** Each character has its own settings profile. The options panel identifies the current character by name and game mode, and lets you copy settings and loot exceptions from another character.
+- **In-game settings:** Open **Escape > Options > AddOns > MyLootOnlyForever**, or type `/mlo`. The panel displays the installed addon version.
+- **Login notice:** The addon confirms when it is active and announces when its version changes.
+- **Standalone:** No external libraries or dependencies are required.
+
+By default, the addon is enabled and hides other players' loot and crafting. Other filters and special loot options start disabled.
+
+## Slash commands
 
 | Command | Action |
 | :--- | :--- |
-| `/mlo` or `/mylootonly` | Opens the in-game settings panel |
+| `/mlo` or `/mylootonly` | Opens the settings panel |
 | `/mlo toggle` | Enables or disables the addon |
 | `/mlo loot` | Toggles hiding other players' loot |
-| `/mlo quality <tier>` | Sets minimum party loot quality (`all`, `uncommon`, `rare`, `epic`, `legendary`) |
-| `/mlo exception add <first last>` | Always show loot messages from that full character name |
-| `/mlo exception remove <player>` | Remove a player's loot exception |
-| `/mlo exception list` | Lists configured loot exceptions |
+| `/mlo quality <tier>` | Sets the minimum loot quality (`all`, `uncommon`, `rare`, `epic`, or `legendary`) |
+| `/mlo exception add <player>` | Adds a player's loot exception |
+| `/mlo exception remove <player>` | Removes a player's loot exception |
+| `/mlo exception list` | Lists loot exceptions |
 | `/mlo craft` | Toggles hiding other players' crafting |
 | `/mlo rolls` | Toggles hiding other players' loot rolls |
-| `/mlo status` | Displays current filter settings in chat |
+| `/mlo status` | Shows the current filter settings in chat |
+| `/mlo profiles` | Lists saved character profiles |
+| `/mlo copy <profile name>` | Copies settings from a saved profile; use the profile name shown by `/mlo profiles` |
 
-## 📦 Installation
-1. Download the latest release from [CurseForge](https://curseforge.com) or the [Releases](../../releases) page.
-2. Place the **`MyLootOnlyForever`** folder inside:
+## Installation
+
+1. Download the latest release from [CurseForge](https://curseforge.com) or the project's [Releases](../../releases) page.
+2. Place the `MyLootOnlyForever` folder inside:
+
    ```text
    World of Warcraft\_forever_\Interface\AddOns\
    ```
-3. Restart WoW: Forever (or type `/reload` if updating) and ensure **MyLootOnlyForever** is enabled in your AddOns list.
 
-## ⚠️ Known Limitations
-Due to WoW: Forever's client restrictions on protected chat events during active raid boss encounters, raid boss loot messages generated mid-combat cannot be filtered by addons until combat ends. Open-world, town, and dungeon filtering works immediately.
+3. Restart WoW: Forever, or type `/reload` when updating, and make sure **MyLootOnlyForever** is enabled in the AddOns list.
 
-## 📄 License
+## Known limitations
+
+Due to WoW: Forever's restrictions on protected chat events during active raid boss encounters, raid boss loot messages generated during combat may not be filterable until combat ends. Filtering works immediately in open-world areas, towns, and dungeons.
+
+## License
+
 Licensed under the [MIT License](LICENSE).
