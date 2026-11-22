@@ -1,13 +1,6 @@
 # MyLootOnlyForever
 Lightweight, zero-dependency WoW: Forever addon that filters out other players' loot, crafting, and roll messages while keeping your own drops and crafts visible.
 
-MyLootOnlyForever (v1.0.0)
-================================================================================
-
-A lightweight, standalone chat filter addon for World of Warcraft: Forever
-that hides other players' loot, crafting, and roll messages while keeping
-your own drops, crafts, and rolls clearly visible.
-
 FEATURES
 --------
 - Hides other players' loot pickups ("[Player] receives loot: [Item]")
