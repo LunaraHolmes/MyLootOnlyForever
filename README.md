@@ -50,7 +50,7 @@ Due to WoW: Forever's restrictions on protected chat events during active raid b
 
 ## Community and support
 
-Join the [MyLootOnlyForever Discord server](https://discord.gg/WYD7WmYrqz) to request features, report bugs, or get help. When reporting a bug, please include what you expected to happen and the steps needed to reproduce it.
+Join the [Discord server](https://discord.gg/WYD7WmYrqz) to request features, report bugs, or get help. When reporting a bug, please include what you expected to happen and the steps needed to reproduce it.
 
 ## License
 
