@@ -1,0 +1,10 @@
+## Interface: 16001, 120007
+## Title: MyLootOnlyForever
+## Notes: Hides other players' loot, crafting, and roll messages while keeping your own.
+## Author: nyxnightfire
+## Version: 1.0.0
+## Category: Chat
+## IconTexture: Interface\Icons\INV_Misc_Bag_08
+## SavedVariables: MyLootOnlyForeverDB
+
+MyLootOnlyForever.lua
