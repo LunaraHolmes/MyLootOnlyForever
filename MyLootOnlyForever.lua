@@ -1,17 +1,47 @@
 local ADDON_NAME = ...
 
--- Default settings for new users
 local DEFAULTS = {
     enabled = true,
     hideOtherLoot = true,
+    minOtherLootQuality = 6,
     hideOtherCrafting = true,
     hideOtherRolls = false,
 }
 
--- Convert a Blizzard GlobalString (e.g. "%s receives loot: %s.") into a Lua pattern
+local HEX_TO_QUALITY = {
+    ff9d9d9d = 0,
+    ffffffff = 1,
+    ff1eff00 = 2,
+    ff0070dd = 3,
+    ffa335ee = 4,
+    ffff8000 = 5,
+    ffe6cc80 = 6,
+    ff00ccff = 7,
+}
+
+local function GetLootLinkQuality(msg)
+    local hex, itemLink = msg:match("|c(%x%x%x%x%x%x%x%x)(|Hitem:.-|h.-|h)|r")
+    if not itemLink then
+        return nil
+    end
+
+    local getItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    if getItemInfo then
+        local _, _, quality = getItemInfo(itemLink)
+        if type(quality) == "number" then
+            return quality
+        end
+    end
+
+    if hex then
+        return HEX_TO_QUALITY[hex:lower()]
+    end
+
+    return nil
+end
+
 local function GlobalStringToPattern(fmt)
     if type(fmt) ~= "string" or fmt == "" then return nil end
-    -- Escape Lua magic characters, then replace format tokens (%s, %d, %1$s, etc.)
     local pattern = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
     pattern = pattern:gsub("%%%%%d*%$?[sd]", ".+")
     return "^" .. pattern .. "$"
@@ -31,7 +61,6 @@ local function BuildPatterns(globalNames, fallbackLiterals)
     return compiled
 end
 
--- Localized patterns built automatically from WoW's built-in GlobalStrings
 local LOOT_PATTERNS = BuildPatterns({
     "LOOT_ITEM",
     "LOOT_ITEM_MULTIPLE",
@@ -85,7 +114,6 @@ local function MatchesAny(msg, list)
     return false
 end
 
--- Helper to match messages safely (handles 12.0+ secret values)
 local function ShouldFilterMessage(msg)
     if not MyLootOnlyForeverDB or not MyLootOnlyForeverDB.enabled then
         return false
@@ -99,23 +127,32 @@ local function ShouldFilterMessage(msg)
 
     local ok, result = pcall(function()
         if MyLootOnlyForeverDB.hideOtherLoot and MatchesAny(msg, LOOT_PATTERNS) then
+            local minQuality = MyLootOnlyForeverDB.minOtherLootQuality or 6
+            if minQuality <= 5 then
+                local quality = GetLootLinkQuality(msg)
+                if quality and quality >= minQuality then
+                    return false
+                end
+            end
             return true
         end
+
         if MyLootOnlyForeverDB.hideOtherCrafting and MatchesAny(msg, CRAFT_PATTERNS) then
             return true
         end
+
         if MyLootOnlyForeverDB.hideOtherRolls then
             if not MatchesAny(msg, SELF_ROLL_PATTERNS) and MatchesAny(msg, OTHER_ROLL_PATTERNS) then
                 return true
             end
         end
+
         return false
     end)
 
     return ok and result or false
 end
 
--- Register chat event filters
 local CHAT_EVENTS = {
     "CHAT_MSG_LOOT",
     "CHAT_MSG_TRADESKILLS",
@@ -130,7 +167,6 @@ for _, event in ipairs(CHAT_EVENTS) do
     end)
 end
 
--- Build the native Options > AddOns settings panel
 local settingsCategoryID
 
 local function RegisterSettingsPanel()
@@ -155,14 +191,45 @@ local function RegisterSettingsPanel()
     end
 
     AddCheckbox("enabled", "Enable Addon", "Master toggle to turn MyLootOnlyForever filtering on or off.")
-    AddCheckbox("hideOtherLoot", "Hide Other Players' Loot", "Hides '[Player] receives loot:' messages while keeping your own 'You receive loot:' lines.")
-    AddCheckbox("hideOtherCrafting", "Hide Other Players' Crafting", "Hides '[Player] creates ...' messages while keeping your own 'You create ...' lines.")
+    AddCheckbox("hideOtherLoot", "Hide Other Players' Loot", "Hides other players' loot lines while keeping your own.")
+
+    if Settings.CreateDropdown and Settings.CreateControlTextContainer then
+        pcall(function()
+            local qualitySetting = Settings.RegisterAddOnSetting(
+                category,
+                "MLOF_minOtherLootQuality",
+                "minOtherLootQuality",
+                MyLootOnlyForeverDB,
+                Settings.VarType.Number,
+                "Other Players' Loot Quality Threshold",
+                DEFAULTS.minOtherLootQuality
+            )
+
+            local function GetQualityOptions()
+                local container = Settings.CreateControlTextContainer()
+                container:Add(6, "Hide All Other Loot")
+                container:Add(2, "Uncommon (Green) & Above")
+                container:Add(3, "Rare (Blue) & Above")
+                container:Add(4, "Epic (Purple) & Above")
+                container:Add(5, "Legendary (Orange) & Above")
+                return container:GetData()
+            end
+
+            Settings.CreateDropdown(
+                category,
+                qualitySetting,
+                GetQualityOptions,
+                "Choose the minimum item quality to allow through when Hide Other Players' Loot is enabled."
+            )
+        end)
+    end
+
+    AddCheckbox("hideOtherCrafting", "Hide Other Players' Crafting", "Hides other players' crafting lines while keeping your own.")
     AddCheckbox("hideOtherRolls", "Hide Other Players' Loot Rolls", "Hides Need, Greed, Pass, and roll winner lines for other players.")
 
     Settings.RegisterAddOnCategory(category)
 end
 
--- Initialize SavedVariables on login
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
 loader:SetScript("OnEvent", function(self, event, loadedAddon)
@@ -179,22 +246,39 @@ loader:SetScript("OnEvent", function(self, event, loadedAddon)
     self:UnregisterEvent("ADDON_LOADED")
 end)
 
--- Slash commands (/mlo and /mylootonly)
+local function GetQualityLabel(q)
+    if q == 2 then return "|cff1eff00Uncommon (Green) & Above|r"
+    elseif q == 3 then return "|cff0070ddRare (Blue) & Above|r"
+    elseif q == 4 then return "|cffa335eeEpic (Purple) & Above|r"
+    elseif q == 5 then return "|cffff8000Legendary (Orange) & Above|r"
+    else return "|cffff4444Hide All|r" end
+end
+
+local function ParseQualityArg(arg)
+    if arg == "all" or arg == "hide" or arg == "none" then return 6
+    elseif arg == "uncommon" or arg == "green" or arg == "2" then return 2
+    elseif arg == "rare" or arg == "blue" or arg == "3" then return 3
+    elseif arg == "epic" or arg == "purple" or arg == "4" then return 4
+    elseif arg == "legendary" or arg == "orange" or arg == "5" then return 5
+    else return nil end
+end
+
 local function PrintStatus(label, state)
     local color = state and "|cff00ff00ON|r" or "|cffff4444OFF|r"
-    print("|cff33ff99[MyLootOnlyForever]|r " .. label .. ": " .. color)
+    print("|cff33ff99(MyLootOnlyForever)|r " .. label .. ": " .. color)
 end
 
 SLASH_MYLOOTONLYFOREVER1 = "/mlo"
 SLASH_MYLOOTONLYFOREVER2 = "/mylootonly"
-SlashCmdList["MYLOOTONLYFOREVER"] = function(input)
-    local cmd = (input or ""):lower():trim()
+SlashCmdList.MYLOOTONLYFOREVER = function(input)
+    local cmd, arg = (input or ""):lower():trim():match("^(%S+)%s*(.*)$")
+    cmd = cmd or ""
 
     if cmd == "" or cmd == "options" or cmd == "config" then
         if settingsCategoryID and Settings and Settings.OpenToCategory then
             Settings.OpenToCategory(settingsCategoryID)
         else
-            print("|cff33ff99[MyLootOnlyForever]|r Commands: /mlo toggle, /mlo loot, /mlo craft, /mlo rolls, /mlo status")
+            print("|cff33ff99(MyLootOnlyForever)|r Commands: /mlo toggle, /mlo loot, /mlo quality, /mlo craft, /mlo rolls, /mlo status")
         end
     elseif cmd == "toggle" then
         MyLootOnlyForeverDB.enabled = not MyLootOnlyForeverDB.enabled
@@ -202,6 +286,14 @@ SlashCmdList["MYLOOTONLYFOREVER"] = function(input)
     elseif cmd == "loot" then
         MyLootOnlyForeverDB.hideOtherLoot = not MyLootOnlyForeverDB.hideOtherLoot
         PrintStatus("Hide other players' loot", MyLootOnlyForeverDB.hideOtherLoot)
+    elseif cmd == "quality" or cmd == "rarity" then
+        local q = ParseQualityArg(arg)
+        if q then
+            MyLootOnlyForeverDB.minOtherLootQuality = q
+            print("|cff33ff99(MyLootOnlyForever)|r Other loot threshold: " .. GetQualityLabel(q))
+        else
+            print("|cff33ff99(MyLootOnlyForever)|r Usage: /mlo quality all | uncommon | rare | epic | legendary")
+        end
     elseif cmd == "craft" or cmd == "crafting" then
         MyLootOnlyForeverDB.hideOtherCrafting = not MyLootOnlyForeverDB.hideOtherCrafting
         PrintStatus("Hide other players' crafting", MyLootOnlyForeverDB.hideOtherCrafting)
@@ -211,9 +303,10 @@ SlashCmdList["MYLOOTONLYFOREVER"] = function(input)
     elseif cmd == "status" then
         PrintStatus("Addon enabled", MyLootOnlyForeverDB.enabled)
         PrintStatus("Hide other loot", MyLootOnlyForeverDB.hideOtherLoot)
+        print("|cff33ff99(MyLootOnlyForever)|r Other loot threshold: " .. GetQualityLabel(MyLootOnlyForeverDB.minOtherLootQuality))
         PrintStatus("Hide other crafting", MyLootOnlyForeverDB.hideOtherCrafting)
         PrintStatus("Hide other rolls", MyLootOnlyForeverDB.hideOtherRolls)
     else
-        print("|cff33ff99[MyLootOnlyForever]|r Usage: /mlo (opens settings), /mlo toggle, /mlo loot, /mlo craft, /mlo rolls, /mlo status")
+        print("|cff33ff99(MyLootOnlyForever)|r Usage: /mlo, /mlo toggle, /mlo loot, /mlo quality, /mlo craft, /mlo rolls, /mlo status")
     end
 end
