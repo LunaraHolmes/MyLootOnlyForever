@@ -48,6 +48,10 @@ By default, the addon is enabled and hides other players' loot and crafting. Oth
 
 Due to WoW: Forever's restrictions on protected chat events during active raid boss encounters, raid boss loot messages generated during combat may not be filterable until combat ends. Filtering works immediately in open-world areas, towns, and dungeons.
 
+## Community and support
+
+Join the [MyLootOnlyForever Discord server](https://discord.gg/WYD7WmYrqz) to request features, report bugs, or get help. When reporting a bug, please include what you expected to happen and the steps needed to reproduce it.
+
 ## License
 
 Licensed under the [MIT License](LICENSE).
