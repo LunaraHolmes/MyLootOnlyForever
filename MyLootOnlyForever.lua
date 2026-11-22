@@ -6,6 +6,10 @@ local DEFAULTS = {
     minOtherLootQuality = 6,
     hideOtherCrafting = true,
     hideOtherRolls = false,
+    lootWhitelist = {},
+    allowGuildLootCrafting = false,
+    allowFriendLootCrafting = false,
+    allowGroupLoot = false,
 }
 
 local HEX_TO_QUALITY = {
@@ -59,6 +63,174 @@ local function BuildPatterns(globalNames, fallbackLiterals)
         table.insert(compiled, { pattern = lit, plain = true })
     end
     return compiled
+end
+
+local function BuildLootPlayerPatterns()
+    local compiled = {}
+    for _, name in ipairs({
+        "LOOT_ITEM", "LOOT_ITEM_MULTIPLE", "LOOT_ITEM_PUSHED",
+        "LOOT_ITEM_PUSHED_MULTIPLE", "LOOT_ITEM_BONUS_ROLL",
+        "LOOT_ITEM_BONUS_ROLL_MULTIPLE",
+    }) do
+        local fmt = _G[name]
+        if type(fmt) == "string" and fmt ~= "" then
+            local pattern = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+            local captured = false
+            pattern = pattern:gsub("%%%%%d*%$?[sd]", function()
+                if not captured then captured = true; return "(.+)" end
+                return ".+"
+            end)
+            if captured then table.insert(compiled, "^" .. pattern .. "$") end
+        end
+    end
+    table.insert(compiled, "^(.+) receives loot:")
+    return compiled
+end
+
+local LOOT_PLAYER_PATTERNS = BuildLootPlayerPatterns()
+
+local function BuildMessagePlayerPatterns(globalNames, fallback)
+    local compiled = {}
+    for _, name in ipairs(globalNames) do
+        local fmt = _G[name]
+        if type(fmt) == "string" and fmt ~= "" then
+            local pattern = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+            local captured = false
+            pattern = pattern:gsub("%%%%%d*%$?[sd]", function()
+                if not captured then captured = true; return "(.+)" end
+                return ".+"
+            end)
+            if captured then table.insert(compiled, "^" .. pattern .. "$") end
+        end
+    end
+    table.insert(compiled, fallback)
+    return compiled
+end
+
+local CRAFT_PLAYER_PATTERNS = BuildMessagePlayerPatterns({ "CREATED_ITEM", "CREATED_ITEM_MULTIPLE" }, "^(.+) creates[: ]")
+
+local function GetLootPlayer(msg)
+    for _, pattern in ipairs(LOOT_PLAYER_PATTERNS) do
+        local player = msg:match(pattern)
+        if player then return player end
+    end
+end
+
+local function NormalizePlayerIdentity(name)
+    if type(name) ~= "string" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    return name:gsub("%s+", " "):lower()
+end
+
+local function SamePlayerName(firstName, secondName)
+    local first = NormalizePlayerIdentity(firstName)
+    local second = NormalizePlayerIdentity(secondName)
+    return first ~= nil and first ~= "" and first == second
+end
+
+local function IsLootWhitelisted(msg)
+    local player = GetLootPlayer(msg)
+    if not player then return false end
+    for name in pairs(MyLootOnlyForeverDB.lootWhitelist or {}) do
+        if SamePlayerName(player, name) then return true end
+    end
+    return false
+end
+
+local function GetMessagePlayer(msg, isLoot)
+    local patterns = isLoot and LOOT_PLAYER_PATTERNS or CRAFT_PLAYER_PATTERNS
+    for _, pattern in ipairs(patterns) do
+        local player = msg:match(pattern)
+        if player then return player end
+    end
+end
+
+local function IsPartyOrRaidMember(player)
+    if not player or not IsInGroup or not IsInGroup() then return false end
+    if IsInRaid and IsInRaid() and GetRaidRosterInfo and GetNumGroupMembers then
+        for index = 1, GetNumGroupMembers() do
+            local name = GetUnitName and GetUnitName("raid" .. index)
+            if not name then name = GetRaidRosterInfo(index) end
+            if SamePlayerName(player, name) then return true end
+        end
+    elseif GetNumSubgroupMembers and UnitName then
+        for index = 1, GetNumSubgroupMembers() do
+            local unit = "party" .. index
+            local name = GetUnitName and GetUnitName(unit)
+            if not name then
+                local firstName, surname = UnitName(unit)
+                name = firstName
+                if firstName and surname and surname ~= "" then name = firstName .. " " .. surname end
+            end
+            if SamePlayerName(player, name) then return true end
+        end
+    end
+    return false
+end
+
+local function IsGuildmate(player)
+    if not player or not IsInGuild or not IsInGuild() then return false end
+    local count = GetNumGuildMembers and GetNumGuildMembers()
+    if not count or not GetGuildRosterInfo then return false end
+    for index = 1, count do
+        local name = GetGuildRosterInfo(index)
+        if SamePlayerName(player, name) then return true end
+    end
+    return false
+end
+
+local function IsCharacterFriend(player)
+    if not player then return false end
+    if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
+        for index = 1, C_FriendList.GetNumFriends() do
+            local info = C_FriendList.GetFriendInfoByIndex(index)
+            if info and SamePlayerName(player, info.name) then return true end
+        end
+    elseif GetNumFriends and GetFriendInfo then
+        for index = 1, GetNumFriends() do
+            local name = GetFriendInfo(index)
+            if SamePlayerName(player, name) then return true end
+        end
+    end
+    return false
+end
+
+local function IsBattleNetWoWFriend(player)
+    if not player then return false end
+    if C_BattleNet and C_BattleNet.GetFriendAccountInfo and C_BattleNet.GetFriendGameAccountInfo and C_BattleNet.GetFriendNumGameAccounts then
+        local count = C_BattleNet.GetFriendCount and C_BattleNet.GetFriendCount()
+            or (BNGetNumFriends and BNGetNumFriends()) or 0
+        for friendIndex = 1, count do
+            local account = C_BattleNet.GetFriendAccountInfo(friendIndex)
+            local gameCount = C_BattleNet.GetFriendNumGameAccounts(friendIndex) or 0
+            for gameIndex = 1, gameCount do
+                local game = C_BattleNet.GetFriendGameAccountInfo(friendIndex, gameIndex)
+                if game and game.characterName and SamePlayerName(player, game.characterName) then return true end
+            end
+            if account and account.gameAccountInfo and account.gameAccountInfo.characterName
+                and SamePlayerName(player, account.gameAccountInfo.characterName) then return true end
+        end
+    elseif BNGetNumFriends and BNGetFriendInfo and BNGetNumFriendGameAccounts and BNGetFriendGameAccountInfo then
+        for friendIndex = 1, BNGetNumFriends() do
+            local presenceID = BNGetFriendInfo(friendIndex)
+            if presenceID then
+                for gameIndex = 1, BNGetNumFriendGameAccounts(presenceID) do
+                    local _, _, characterName = BNGetFriendGameAccountInfo(presenceID, gameIndex)
+                    if SamePlayerName(player, characterName) then return true end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function IsSocialLootCraftException(msg, isLoot)
+    local player = GetMessagePlayer(msg, isLoot)
+    if not player then return false end
+    if MyLootOnlyForeverDB.allowGuildLootCrafting and IsGuildmate(player) then return true end
+    if MyLootOnlyForeverDB.allowFriendLootCrafting
+        and (IsCharacterFriend(player) or IsBattleNetWoWFriend(player)) then return true end
+    return false
 end
 
 local LOOT_PATTERNS = BuildPatterns({
@@ -127,6 +299,9 @@ local function ShouldFilterMessage(msg)
 
     local ok, result = pcall(function()
         if MyLootOnlyForeverDB.hideOtherLoot and MatchesAny(msg, LOOT_PATTERNS) then
+            if IsLootWhitelisted(msg)
+                or (MyLootOnlyForeverDB.allowGroupLoot and IsPartyOrRaidMember(GetMessagePlayer(msg, true)))
+                or IsSocialLootCraftException(msg, true) then return false end
             local minQuality = MyLootOnlyForeverDB.minOtherLootQuality or 6
             if minQuality <= 5 then
                 local quality = GetLootLinkQuality(msg)
@@ -138,6 +313,7 @@ local function ShouldFilterMessage(msg)
         end
 
         if MyLootOnlyForeverDB.hideOtherCrafting and MatchesAny(msg, CRAFT_PATTERNS) then
+            if IsSocialLootCraftException(msg, false) then return false end
             return true
         end
 
@@ -192,6 +368,9 @@ local function RegisterSettingsPanel()
 
     AddCheckbox("enabled", "Enable Addon", "Master toggle to turn MyLootOnlyForever filtering on or off.")
     AddCheckbox("hideOtherLoot", "Hide Other Players' Loot", "Hides other players' loot lines while keeping your own.")
+    AddCheckbox("allowGroupLoot", "Allow Party & Raid Loot", "Shows loot messages from current party and raid members regardless of the quality threshold.")
+    AddCheckbox("allowGuildLootCrafting", "Allow Guildmates' Loot & Crafting", "Shows loot and crafting messages from members in your current guild roster.")
+    AddCheckbox("allowFriendLootCrafting", "Allow Friends' Loot & Crafting", "Shows loot and crafting messages from character friends and Battle.net friends playing WoW.")
 
     if Settings.CreateDropdown and Settings.CreateControlTextContainer then
         pcall(function()
@@ -238,9 +417,10 @@ loader:SetScript("OnEvent", function(self, event, loadedAddon)
     MyLootOnlyForeverDB = MyLootOnlyForeverDB or {}
     for k, v in pairs(DEFAULTS) do
         if MyLootOnlyForeverDB[k] == nil then
-            MyLootOnlyForeverDB[k] = v
+            MyLootOnlyForeverDB[k] = type(v) == "table" and {} or v
         end
     end
+    if type(MyLootOnlyForeverDB.lootWhitelist) ~= "table" then MyLootOnlyForeverDB.lootWhitelist = {} end
 
     RegisterSettingsPanel()
     self:UnregisterEvent("ADDON_LOADED")
@@ -268,6 +448,23 @@ local function PrintStatus(label, state)
     print("|cff33ff99(MyLootOnlyForever)|r " .. label .. ": " .. color)
 end
 
+local function NormalizePlayerName(name)
+    name = (name or ""):match("^%s*(.-)%s*$")
+    if name == "" then return nil end
+    return name:sub(1, 1):upper() .. name:sub(2):lower()
+end
+
+local function PrintWhitelist()
+    local names = {}
+    for name in pairs(MyLootOnlyForeverDB.lootWhitelist) do table.insert(names, name) end
+    table.sort(names, function(a, b) return a:lower() < b:lower() end)
+    if #names == 0 then
+        print("|cff33ff99(MyLootOnlyForever)|r Loot exceptions: none")
+    else
+        print("|cff33ff99(MyLootOnlyForever)|r Loot exceptions: " .. table.concat(names, ", "))
+    end
+end
+
 SLASH_MYLOOTONLYFOREVER1 = "/mlo"
 SLASH_MYLOOTONLYFOREVER2 = "/mylootonly"
 SlashCmdList.MYLOOTONLYFOREVER = function(input)
@@ -278,7 +475,7 @@ SlashCmdList.MYLOOTONLYFOREVER = function(input)
         if settingsCategoryID and Settings and Settings.OpenToCategory then
             Settings.OpenToCategory(settingsCategoryID)
         else
-            print("|cff33ff99(MyLootOnlyForever)|r Commands: /mlo toggle, /mlo loot, /mlo quality, /mlo craft, /mlo rolls, /mlo status")
+            print("|cff33ff99(MyLootOnlyForever)|r Commands: /mlo toggle, /mlo loot, /mlo quality, /mlo exception add|remove|list, /mlo craft, /mlo rolls, /mlo status")
         end
     elseif cmd == "toggle" then
         MyLootOnlyForeverDB.enabled = not MyLootOnlyForeverDB.enabled
@@ -293,6 +490,24 @@ SlashCmdList.MYLOOTONLYFOREVER = function(input)
             print("|cff33ff99(MyLootOnlyForever)|r Other loot threshold: " .. GetQualityLabel(q))
         else
             print("|cff33ff99(MyLootOnlyForever)|r Usage: /mlo quality all | uncommon | rare | epic | legendary")
+        end
+    elseif cmd == "exception" or cmd == "exceptions" then
+        local action, name = arg:match("^(%S+)%s*(.-)%s*$")
+        action = action and action:lower()
+        MyLootOnlyForeverDB.lootWhitelist = MyLootOnlyForeverDB.lootWhitelist or {}
+        if action == "add" and NormalizePlayerName(name) then
+            name = NormalizePlayerName(name)
+            MyLootOnlyForeverDB.lootWhitelist[name] = true
+            print("|cff33ff99(MyLootOnlyForever)|r Added loot exception for " .. name .. ".")
+        elseif (action == "remove" or action == "delete") and NormalizePlayerName(name) then
+            name = NormalizePlayerName(name)
+            local removed = MyLootOnlyForeverDB.lootWhitelist[name] ~= nil
+            MyLootOnlyForeverDB.lootWhitelist[name] = nil
+            print("|cff33ff99(MyLootOnlyForever)|r " .. (removed and ("Removed loot exception for " .. name .. ".") or ("No loot exception found for " .. name .. ".")))
+        elseif action == "list" then
+            PrintWhitelist()
+        else
+            print("|cff33ff99(MyLootOnlyForever)|r Usage: /mlo exception add <player> | remove <player> | list")
         end
     elseif cmd == "craft" or cmd == "crafting" then
         MyLootOnlyForeverDB.hideOtherCrafting = not MyLootOnlyForeverDB.hideOtherCrafting

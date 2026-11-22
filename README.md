@@ -5,6 +5,9 @@ A lightweight, standalone World of Warcraft: **Forever** addon that filters out 
 ## ✨ Features
 * **Only Your Loot:** Hides `[Player] receives loot:` messages while preserving your own `You receive loot:` pickups.
 * **Item Quality Threshold (New in v1.1.0):** Optionally allow **Uncommon (Green)**, **Rare (Blue)**, **Epic (Purple)**, or **Legendary (Orange)** drops from party/raid members to still show in chat while hiding lower-rarity spam.
+* **Loot Whitelist Exceptions (New in v1.2.0):** Allow loot messages from specific players through regardless of the quality threshold.
+* **Guild and Friend Exceptions (New in v1.2.0):** Optional settings allow guildmates' or friends' loot and crafting messages through automatically.
+* **Party and Raid Loot Exception (New in v1.2.0):** Optionally show loot from current party and raid members regardless of the quality threshold.
 * **No Crafting Spam:** Hides nearby `[Player] creates ...` notifications while keeping your own `You create ...` lines.
 * **Optional Roll Filtering:** Optionally hide other players' Need, Greed, Pass, and roll winner lines while keeping your own roll results.
 * **Native Settings Panel:** Configure everything easily under **Escape > Options > AddOns > MyLootOnlyForever** with persistent `SavedVariables`.
@@ -19,6 +22,9 @@ A lightweight, standalone World of Warcraft: **Forever** addon that filters out 
 | `/mlo toggle` | Enables or disables the addon |
 | `/mlo loot` | Toggles hiding other players' loot |
 | `/mlo quality <tier>` | Sets minimum party loot quality (`all`, `uncommon`, `rare`, `epic`, `legendary`) |
+| `/mlo exception add <first last>` | Always show loot messages from that full character name |
+| `/mlo exception remove <player>` | Remove a player's loot exception |
+| `/mlo exception list` | Lists configured loot exceptions |
 | `/mlo craft` | Toggles hiding other players' crafting |
 | `/mlo rolls` | Toggles hiding other players' loot rolls |
 | `/mlo status` | Displays current filter settings in chat |
